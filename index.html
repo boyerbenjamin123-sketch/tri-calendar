@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TriCalendar 2026</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="apple-touch-icon" href="icons/icon-192x192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tri 2026">
+<style>
+:root{--im:#ff453a;--wtcs:#30d158;--t100:#ff9f0a;--muted:#8e8e93;--bg:#0a0a0a;--card:#1c1c1e;--t:#f5f5f7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t);font:15px -apple-system,system-ui,sans-serif;padding:env(safe-area-inset-top) 0 40px}
+.hero{padding:24px 16px 8px}.hero h1{margin:0;font-size:28px}.hero-sub{color:var(--muted);font-size:13px}
+.stats-bar{display:flex;gap:8px;overflow-x:auto;padding:8px 16px}
+.stat-pill{flex:none;padding:6px 12px;border-radius:99px;background:var(--card);color:var(--t);font-size:13px;cursor:pointer;border:1px solid transparent}
+.stat-pill.active{border-color:var(--t)}
+.prog{padding:8px 16px}.prog-bar{height:6px;background:var(--card);border-radius:3px;overflow:hidden;margin-top:6px}
+.prog-fill{height:100%;background:var(--t);transition:width .3s}.prog-fill.im{background:var(--im)}.prog-fill.wtcs{background:var(--wtcs)}.prog-fill.t100{background:var(--t100)}
+.nrb{margin:8px 16px;padding:12px;border-radius:14px;background:var(--card);display:flex;gap:12px;align-items:center}
+.nrb-badge{font-size:10px;font-weight:700;color:var(--muted)}.nrb-name{font-weight:600}.nrb-sub{font-size:12px;color:var(--muted)}
+.nrb-cd{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}.nrb-cd-lbl{font-size:10px;color:var(--muted)}
+.mhdr{display:flex;align-items:center;gap:10px;padding:12px 16px}.mhdr-name{font-weight:700;font-size:17px}.mcnt{flex:1;font-size:12px}
+.month-toggle{all:unset;display:block;width:100%;cursor:pointer}.month-chevron{transition:transform .2s}
+.month-wrap.collapsed .month-chevron{transform:rotate(-90deg)}
+.month-wrap.collapsed .month-content{display:none}
+.rcard{display:flex;align-items:center;gap:12px;margin:0 0 8px;padding:12px;background:var(--card);border-radius:14px;border-left:4px solid var(--muted)}
+.rcard-im{border-left-color:var(--im)}.rcard-wtcs{border-left-color:var(--wtcs)}.rcard-t100{border-left-color:var(--t100)}
+.rcard-done{opacity:.6}
+.rdate{width:44px;text-align:center}.rdate-d{font-size:20px;font-weight:700}.rdate-m{font-size:10px;color:var(--muted)}
+.rcard-mid{flex:1;min-width:0}.rcard-name{font-weight:600}.rcard-sub{font-size:12px}
+.rcard-badges{display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.rbadge,.done-badge{font-size:10px;padding:2px 6px;border-radius:6px;background:#2c2c2e}
+.bim{color:var(--im)}.bwtcs{color:var(--wtcs)}.bt100{color:var(--t100)}
+.srch-hint{padding:16px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="hero">
+  <h1>TriCalendar 2026</h1>
+  <div class="hero-sub" id="heroSub">… épreuves · IRONMAN · WTCS · T100</div>
+  <div class="hero-sub" id="syncStatus" style="margin-top:4px"></div>
+</div>
+<div class="stats-bar">
+  <button class="stat-pill all" id="spill-all" onclick="filterCal('all')">Toutes</button>
+  <button class="stat-pill" id="spill-upcoming" onclick="filterCal('upcoming')">À venir</button>
+  <button class="stat-pill" id="spill-done" onclick="filterCal('done')">Terminées</button>
+</div>
+<div class="stats-bar">
+  <button class="stat-pill" id="spill-im" onclick="filterCal('im')">🔴 IRONMAN</button>
+  <button class="stat-pill" id="spill-wtcs" onclick="filterCal('wtcs')">🟢 WTCS</button>
+  <button class="stat-pill" id="spill-t100" onclick="filterCal('t100')">🟡 T100</button>
+  <a class="stat-pill all" style="text-decoration:none" href="webcal://TON-USER.github.io/tricalendar/data/tricalendar.ics">📅 S'abonner</a>
+</div>
+<div class="prog"><div style="display:flex;justify-content:space-between"><b id="progTitle">Saison 2026</b><span id="progLbl"></span></div><div class="prog-bar"><div class="prog-fill all" id="progFill"></div></div></div>
+<div id="nrb-cal"></div>
+<div id="cal-cards" style="padding:0 16px 8px"></div>
+
+<script>
+var races = {}, wtcsRaces = {}, t100Races = {};
+
+// Stubs de test (dans ton vrai index.html, ces fonctions existent déjà)
+function fmtCd(ms) {
+  var m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60);
+  return d > 0 ? d + 'j ' + h + 'h' : h + 'h ' + (m % 60) + 'min';
+}
+function openRace(c, id) { alert('Fiche course : ' + c + ' / ' + id); }
+
+// ═══════════ COUCHE DONNÉES ═══════════
+var DATA_URL = 'data/races.json', LS_KEY = 'tri2026_data';
+var currentFilter = 'all', lastFetch = 0, cachedData = null, nrbTimer = null;
+var MONTHS = ["Janv.","Févr.","Mars","Avr.","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
+
+function allCircuits() { return [['im', races], ['wtcs', wtcsRaces], ['t100', t100Races]]; }
+
+function parisHM(isoUtc) {
+  var s = new Intl.DateTimeFormat('fr-FR', {timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).format(new Date(isoUtc));
+  return s.replace(':', 'h');
+}
+function raceDone(r) {
+  if (r.postponed) return false;
+  if (r.done) return true;
+  if (!r.startUTC) return false;
+  return Date.parse(r.startUTC) + (r.days || 1) * 86400000 < Date.now();
+}
+function computeStats() {
+  var s = {total:0, done:0, im:{total:0,done:0}, wtcs:{total:0,done:0}, t100:{total:0,done:0}};
+  allCircuits().forEach(function(p) {
+    for (var id in p[1]) {
+      var d = raceDone(p[1][id]);
+      s.total++; s[p[0]].total++;
+      if (d) { s.done++; s[p[0]].done++; }
+    }
+  });
+  return s;
+}
+function applyData(d) {
+  races = d.races || {}; wtcsRaces = d.wtcsRaces || {}; t100Races = d.t100Races || {};
+  allCircuits().forEach(function(p) {
+    for (var id in p[1]) { var r = p[1][id]; r.startTimeFR = r.startUTC ? parisHM(r.startUTC) + ' (heure fr.)' : ''; }
+  });
+  renderAll();
+  setSync(d.updatedAt, false);
+}
+function setSync(updatedAt, offline) {
+  var el = document.getElementById('syncStatus'); if (!el || !updatedAt) return;
+  var t = new Date(updatedAt).toLocaleString('fr-FR', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris'});
+  el.textContent = 'Données du ' + t + (offline ? ' · hors ligne' : '');
+}
+function syncData() {
+  if (Date.now() - lastFetch < 60000 && cachedData) return;
+  lastFetch = Date.now();
+  fetch(DATA_URL, {cache:'no-cache'})
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(d) {
+      if (!cachedData || d.updatedAt !== cachedData.updatedAt) {
+        cachedData = d;
+        try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch(e) {}
+        applyData(d);
+      } else setSync(d.updatedAt, false);
+    })
+    .catch(function() {
+      if (cachedData) setSync(cachedData.updatedAt, true);
+      else document.getElementById('cal-cards').innerHTML = '<div class="srch-hint">Impossible de charger les données. Réessaie une fois en ligne.</div>';
+    });
+}
+function boot() {
+  try { cachedData = JSON.parse(localStorage.getItem(LS_KEY)); } catch(e) {}
+  if (cachedData) applyData(cachedData);
+  syncData();
+}
+
+// ═══════════ RENDU ═══════════
+function badgesHTML(c, r) {
+  if (c === 'im') {
+    var cls = r.isWC ? 'bwc' : (r.badge || 'bfull');
+    var lab = r.tag || (r.isWC ? 'Champ. du Monde' : (cls === 'b703' ? '70.3' : 'Full 140.6'));
+    return '<span class="rbadge ' + cls + '">' + lab + '</span><span class="rbadge bim" style="font-size:8px">IM</span>';
+  }
+  if (c === 'wtcs') return '<span class="rbadge bwtcs">' + (r.format || '').split(/ [+·—] /)[0] + '</span><span class="rbadge bwtcs" style="font-size:8px">WTCS</span>';
+  return '<span class="rbadge bt100">' + (r.format || '') + '</span><span class="rbadge bt100" style="font-size:8px">T100</span>';
+}
+function cardHTML(c, id, r) {
+  var done = raceDone(r), d = r.isoDate, day = +d.slice(6,8), mon = MONTHS[+d.slice(4,6) - 1];
+  var loc = (r.loc || '').split(' — ')[0], dateBlock, sub, status = '';
+  if (r.postponed) {
+    dateBlock = '<div class="rdate" style="background:rgba(255,159,10,.12)"><div class="rdate-d" style="font-size:11px">⏳</div><div class="rdate-m">Reportée</div></div>';
+    sub = loc + ' · date initiale ' + day + ' ' + mon;
+    status = '<span class="done-badge" style="background:rgba(255,159,10,.18);color:var(--t100)">⏳ Reportée</span>';
+  } else {
+    dateBlock = '<div class="rdate"><div class="rdate-d">' + day + '</div><div class="rdate-m">' + mon + '</div></div>';
+    sub = loc;
+    if (done) status = '<span class="done-badge">✓ Terminée</span>';
+  }
+  return '<div class="rcard rcard-' + c + (done ? ' rcard-done' : '') + '" data-circuit="' + c + '" data-done="' + (done ? '1' : '') + '" onclick="openRace(\'' + c + '\',\'' + id + '\')">' +
+    dateBlock +
+    '<div class="rcard-mid"><div class="rcard-name">' + r.name + '</div><div class="rcard-sub"><span style="color:var(--muted)">' + sub + '</span></div></div>' +
+    '<div class="rcard-badges">' + status + badgesHTML(c, r) + '</div></div>';
+}
+function renderCalendar() {
+  var list = [];
+  allCircuits().forEach(function(p) { for (var id in p[1]) list.push({c:p[0], id:id, r:p[1][id]}); });
+  list.sort(function(a, b) { return (a.r.isoDate + (a.r.startUTC || '')).localeCompare(b.r.isoDate + (b.r.startUTC || '')); });
+  var months = {};
+  list.forEach(function(x) { (months[+x.r.isoDate.slice(4,6) - 1] = months[+x.r.isoDate.slice(4,6) - 1] || []).push(x); });
+  var html = '';
+  Object.keys(months).map(Number).sort(function(a, b) { return a - b; }).forEach(function(m) {
+    var items = months[m], n = {im:0, wtcs:0, t100:0}, allDone = true;
+    items.forEach(function(x) { n[x.c]++; if (!raceDone(x.r) && !x.r.postponed) allDone = false; });
+    var cnt = [];
+    if (n.im) cnt.push('<span style="color:var(--im)">' + n.im + ' IM</span>');
+    if (n.wtcs) cnt.push('<span style="color:var(--wtcs)">' + n.wtcs + ' WTCS</span>');
+    if (n.t100) cnt.push('<span style="color:var(--t100)">' + n.t100 + ' T100</span>');
+    html += '<div class="month-wrap' + (allDone ? ' collapsed' : '') + '" data-dc="' + (allDone ? 1 : 0) + '">' +
+      '<button class="month-toggle" type="button" onclick="toggleMonth(this)"><div class="mhdr"><div class="mhdr-name">' + MONTHS[m] + '</div><div class="mcnt">' + cnt.join(' · ') + '</div><div class="month-chevron">▾</div></div></button>' +
+      '<div class="month-content">' + items.map(function(x) { return cardHTML(x.c, x.id, x.r); }).join('') + '</div></div>';
+  });
+  document.getElementById('cal-cards').innerHTML = html;
+}
+function toggleMonth(btn) { btn.parentElement.classList.toggle('collapsed'); }
+function renderHero() {
+  var s = computeStats();
+  function t(id, v) { var e = document.getElementById(id); if (e) e.textContent = v; }
+  t('heroSub', s.total + ' épreuves · IRONMAN · WTCS · T100');
+  t('spill-im', '🔴 ' + s.im.total + ' IRONMAN');
+  t('spill-wtcs', '🟢 ' + s.wtcs.total + ' WTCS');
+  t('spill-t100', '🟡 ' + s.t100.total + ' T100');
+}
+function renderAll() { renderCalendar(); renderHero(); filterCal(currentFilter); initNextBanner(); }
+
+// ═══════════ FILTRES / PROGRESSION / PROCHAIN DÉPART ═══════════
+function filterCal(type) {
+  currentFilter = type;
+  var pillMap = {all:'spill-all', upcoming:'spill-upcoming', done:'spill-done', im:'spill-im', wtcs:'spill-wtcs', t100:'spill-t100'};
+  Object.keys(pillMap).forEach(function(k) { var el = document.getElementById(pillMap[k]); if (el) el.classList.toggle('active', k === type); });
+  document.querySelectorAll('#cal-cards .rcard').forEach(function(card) {
+    var c = card.dataset.circuit, done = !!card.dataset.done, show;
+    if (type === 'all') show = true; else if (type === 'upcoming') show = !done; else if (type === 'done') show = done; else show = (type === c);
+    card.style.display = show ? 'flex' : 'none';
+  });
+  var expand = (type !== 'all' && type !== 'upcoming');
+  document.querySelectorAll('#cal-cards .month-wrap').forEach(function(w) {
+    var vis = [].some.call(w.querySelectorAll('.rcard'), function(c) { return c.style.display !== 'none'; });
+    w.style.display = vis ? '' : 'none';
+    w.classList.toggle('collapsed', expand ? false : w.dataset.dc === '1');
+  });
+  updateProgress(type);
+}
+function updateProgress(type) {
+  var s = computeStats();
+  var m = {all:[s.total,s.done], upcoming:[s.total-s.done,0], done:[s.done,s.done], im:[s.im.total,s.im.done], wtcs:[s.wtcs.total,s.wtcs.done], t100:[s.t100.total,s.t100.done]};
+  var p = m[type] || m.all, pct = p[0] > 0 ? Math.round(p[1] / p[0] * 100) : 0;
+  var lbl = document.getElementById('progLbl'), fill = document.getElementById('progFill'), ttl = document.getElementById('progTitle');
+  if (lbl) lbl.textContent = p[1] + ' / ' + p[0] + ' épreuve' + (p[0] > 1 ? 's' : '');
+  if (fill) {
+    var cm = {all:'all', upcoming:'all', done:'all', im:'im', wtcs:'wtcs', t100:'t100'};
+    fill.className = 'prog-fill ' + (cm[type] || 'all');
+    fill.style.width = Math.max(pct, 1) + '%';
+  }
+  var tm = {all:'Saison 2026', upcoming:'Prochaines épreuves', done:'Terminées', im:'IRONMAN 2026', wtcs:'WTCS 2026', t100:'T100 2026'};
+  if (ttl) ttl.textContent = tm[type] || 'Saison 2026';
+}
+function findNext() {
+  var now = Date.now(), best = null, bestTs = Infinity;
+  allCircuits().forEach(function(p) {
+    for (var id in p[1]) {
+      var r = p[1][id]; if (r.postponed || !r.startUTC) continue;
+      var ts = Date.parse(r.startUTC);
+      if (ts > now && ts < bestTs) { bestTs = ts; best = {id:id, r:r, ts:ts, circuit:p[0]}; }
+    }
+  });
+  return best;
+}
+function initNextBanner() {
+  var el = document.getElementById('nrb-cal'); if (!el) return;
+  clearInterval(nrbTimer);
+  var next = findNext(); if (!next) { el.innerHTML = ''; return; }
+  var lbl = next.circuit === 'im' ? 'IRONMAN' : next.circuit === 'wtcs' ? 'WTCS' : 'T100';
+  el.innerHTML = '<div class="nrb nrb-' + next.circuit + '" onclick="openRace(\'' + next.circuit + '\',\'' + next.id + '\')">' +
+    '<div style="flex:1;min-width:0"><div class="nrb-badge ' + next.circuit + '">⚡ PROCHAIN DÉPART · ' + lbl + '</div>' +
+    '<div class="nrb-name">' + next.r.name + '</div><div class="nrb-sub">' + (next.r.loc || '').split(' — ')[0] + ' · ' + next.r.date + '</div></div>' +
+    '<div style="text-align:right;flex-shrink:0"><div class="nrb-cd" id="nrb-cd-main">' + fmtCd(next.ts - Date.now()) + '</div><div class="nrb-cd-lbl">avant le départ</div></div></div>';
+  nrbTimer = setInterval(function() { var e = document.getElementById('nrb-cd-main'); if (e) e.textContent = fmtCd(next.ts - Date.now()); }, 30000);
+}
+
+// ═══════════ DÉMARRAGE ═══════════
+boot();
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) { if (cachedData) renderAll(); syncData(); }
+});
+window.addEventListener('online', syncData);
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() { navigator.serviceWorker.register('sw.js'); });
+}
+</script>
+</body>
+</html>
